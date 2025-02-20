@@ -1,0 +1,2 @@
+The Final Project of the lecture Generative Neural Networks (GNN) in Heidelberg University. This is an idea to solve the competition on Kaggle: https://www.kaggle.com/competitions/gpr-max-deep-
+learning-challenge-1-gdlc-1
