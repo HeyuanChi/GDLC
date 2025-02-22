@@ -1,2 +1,4 @@
 *.npy
 .DS_Store
+test.ipynb
+*.pyc
