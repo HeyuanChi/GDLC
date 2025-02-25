@@ -1,3 +1,4 @@
+import os
 from tqdm import tqdm
 
 import torch
@@ -18,7 +19,9 @@ def train_unet_fill(model, train_loader, test_loader, lr=1e-4, num_epochs=100, p
     criterion = nn.MSELoss()
     
     early_stopper = EarlyStopper(patience=patience, min_delta=tol)
-    
+
+    if not os.path.exists('./results/unet_fill'):
+        os.mkdir('./results/unet_fill')
     loss_log = open("./results/unet_fill/loss.csv", "w")
     loss_log.write("epoch,train_loss,val_loss\n")
     
@@ -77,7 +80,9 @@ def train_unet_fwi(model, train_loader, test_loader, lr=5e-4, num_epochs=100, pa
     criterion = nn.L1Loss()
     
     early_stopper = EarlyStopper(patience=patience, min_delta=tol)
-    
+
+    if not os.path.exists('./results/unet_fwi'):
+        os.mkdir('./results/unet_fwi')
     loss_log = open("./results/unet_fwi/loss.csv", "w")
     loss_log.write("epoch,train_loss,val_loss\n")
     
