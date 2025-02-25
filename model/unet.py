@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, dropout=None):
+    def __init__(self, in_channels, out_channels, kernel_size=3, dropout=0.0):
         super().__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=1, bias=False),
@@ -16,21 +16,22 @@ class DoubleConv(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout2d(dropout) if dropout > 0 else None
+
     def forward(self, x):
         x = self.conv1(x)
-        if self.dropout:
+        if self.dropout is not None:
             x = self.dropout(x)
         x = self.conv2(x)
-        return self.double_conv(x)
+        return x
     
 
 class Down(nn.Module):
-    def __init__(self, in_channels, out_channels, dropout=None):
+    def __init__(self, in_channels, out_channels, kernel_size=3, dropout=0.0):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
             nn.MaxPool2d(2),
-            DoubleConv(in_channels, out_channels, dropout=dropout)
+            DoubleConv(in_channels, out_channels, kernel_size, dropout)
         )
 
     def forward(self, x):
@@ -38,10 +39,10 @@ class Down(nn.Module):
 
 
 class Up(nn.Module):
-    def __init__(self, in_channels, out_channels, dropout=None, resize='padding'):
+    def __init__(self, in_channels, out_channels, kernel_size=3, dropout=0.0, resize='padding'):
         super().__init__()
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.conv = DoubleConv(in_channels, out_channels, dropout)
+        self.conv = DoubleConv(in_channels, out_channels, kernel_size, dropout)
         self.resize = resize
 
     def forward(self, x1, x2):
@@ -77,17 +78,17 @@ class FillUNet(nn.Module):
         super().__init__()
 
         # Encoder
-        self.inc = DoubleConv(in_channels, 64)
-        self.down1 = Down(64,   128)
-        self.down2 = Down(128,  256)
-        self.down3 = Down(256,  512)
-        self.down4 = Down(512, 1024)
+        self.inc = DoubleConv(in_channels, 64, 3)
+        self.down1 = Down(64,   128, kernel_size=3)
+        self.down2 = Down(128,  256, kernel_size=3)
+        self.down3 = Down(256,  512, kernel_size=3)
+        self.down4 = Down(512, 1024, kernel_size=3)
 
         # Decoder
-        self.up1 = Up(1024 + 512, 512)
-        self.up2 = Up(512  + 256, 256)
-        self.up3 = Up(256  + 128, 128)
-        self.up4 = Up(128  +  64,  64)
+        self.up1 = Up(1024 + 512, 512, kernel_size=3)
+        self.up2 = Up(512  + 256, 256, kernel_size=3)
+        self.up3 = Up(256  + 128, 128, kernel_size=3)
+        self.up4 = Up(128  +  64,  64, kernel_size=3)
         self.outc = nn.Conv2d(64, out_channels, kernel_size=1)
 
     def forward(self, x):
@@ -111,18 +112,28 @@ class FWIUNet(nn.Module):
         super().__init__()
 
         # Encoder
-        self.inc = DoubleConv(in_channels, 16)
-        self.down1 = Down(16,   32, dropout=0.1)
-        self.down2 = Down(32,   64, dropout=0.2)
-        self.down3 = Down(64,  128, dropout=0.2)
-        self.down4 = Down(128, 256, dropout=0.3)
+        self.inc = DoubleConv(in_channels, 16, 4)
+        self.down1 = Down(16,   32, kernel_size=4, dropout=0.1)
+        self.down2 = Down(32,   64, kernel_size=4, dropout=0.2)
+        self.down3 = Down(64,  128, kernel_size=4, dropout=0.2)
+        self.down4 = Down(128, 256, kernel_size=4, dropout=0.3)
 
         # Decoder
-        self.up1 = Up(256 + 128, 128, dropout=0.2, resize='cropping')
-        self.up2 = Up(128 +  64,  64, dropout=0.2, resize='cropping')
-        self.up3 = Up(64  +  32,  32, dropout=0.1, resize='cropping')
-        self.up4 = Up(32  +  16,  16, dropout=0.1, resize='cropping')
+        self.up1 = Up(256 + 128, 128, kernel_size=4, dropout=0.2, resize='cropping')
+        self.up2 = Up(128 +  64,  64, kernel_size=4, dropout=0.2, resize='cropping')
+        self.up3 = Up(64  +  32,  32, kernel_size=4, dropout=0.1, resize='cropping')
+        self.up4 = Up(32  +  16,  16, kernel_size=4, dropout=0.1, resize='cropping')
         self.outc = nn.Conv2d(64, out_channels, kernel_size=1)
+
+        # Init
+        self.apply(self._initialize_weights)
+
+    def _initialize_weights(self, m):
+        if isinstance(m, nn.Conv2d):
+            # Kaiming He Init for Conv2d
+            nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         x1 = self.inc(x)       # ~ [B,  16, 230, 230]
