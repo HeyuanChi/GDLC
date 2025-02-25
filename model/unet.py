@@ -7,12 +7,12 @@ class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, dropout=0.0):
         super().__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=1, bias=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding='same'),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, padding=1, bias=False),
+            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, padding='same'),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -58,8 +58,8 @@ class Up(nn.Module):
             diffY = x2.size(2) - x1.size(2)
             diffX = x2.size(3) - x1.size(3)
             if diffY > 0 or diffX > 0:
-                x2 = x2[:, :, (diffY + 1) // 2 : - diffY // 2, (diffX + 1) // 2 : - diffX // 2]
-        
+                x2 = x2[:, :, (diffY + 1) // 2 : x2.size(2) - diffY // 2, (diffX + 1) // 2 : x2.size(3) - diffX // 2]
+
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
@@ -123,7 +123,7 @@ class FWIUNet(nn.Module):
         self.up2 = Up(128 +  64,  64, kernel_size=4, dropout=0.2, resize='cropping')
         self.up3 = Up(64  +  32,  32, kernel_size=4, dropout=0.1, resize='cropping')
         self.up4 = Up(32  +  16,  16, kernel_size=4, dropout=0.1, resize='cropping')
-        self.outc = nn.Conv2d(64, out_channels, kernel_size=1)
+        self.outc = nn.Conv2d(16, out_channels, kernel_size=1)
 
         # Init
         self.apply(self._initialize_weights)

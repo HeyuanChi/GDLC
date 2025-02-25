@@ -52,7 +52,7 @@ class FWIDataset(Dataset):
         bscan /= np.max(np.abs(bscan))  # Convert to [-1, 1]
         
         # Labels data
-        labels_path = os.path.join(self.labels_path, f'Model_{idx}.npy')
+        labels_path = os.path.join(self.labels_dir, f'Model_{idx}.npy')
         labels = np.load(labels_path).astype(np.float32)
         labels = labels / 10 - 0.5 # Convert to [-0.5, 0.5]
 
