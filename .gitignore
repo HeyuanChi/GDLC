@@ -1,4 +1,6 @@
 *.npy
 .DS_Store
-test.ipynb
+*.ipynb
 *.pyc
+*.csv
+*.pt
