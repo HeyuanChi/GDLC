@@ -10,7 +10,7 @@ def get_device():
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda or use_mps else {}
     return device, kwargs
 
-def predict(model, data_loader, flows=False):
+def predict(model, data_loader):
     device, kwargs = get_device()
 
     model.to(device)
@@ -24,10 +24,7 @@ def predict(model, data_loader, flows=False):
         for inputs, targets in data_loader:
             inputs = inputs.to(device).float()
             targets = targets.to(device).float()
-            if flows:
-                outputs, nll = model(inputs)
-            else:
-                outputs = model(inputs)
+            outputs = model(inputs)
 
             all_inputs.append(inputs)
             all_outputs.append(outputs)
