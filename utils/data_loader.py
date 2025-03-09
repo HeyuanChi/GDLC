@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
 
-from utils.utils import get_device
+from utils.utils import get_device, calc_travel_time_2d
 
 
 class MissingDataset(Dataset):
@@ -37,10 +37,14 @@ class MissingDataset(Dataset):
 
 
 class FWIDataset(Dataset):
-    def __init__(self, bscan_dir='./data/Training_Bscan', labels_dir='./data/Training_Labels'):
+    def __init__(self, bscan_dir='./data/Training_Bscan', labels_dir='./data/Training_Labels', use_tt=False, dz=0.1, c0=3e8):
         self.bscan_dir = bscan_dir
         self.labels_dir = labels_dir
         self.num_samples = 4400
+
+        self.use_tt = use_tt
+        self.dz = dz
+        self.c0 = c0
 
     def __len__(self):
         return self.num_samples
@@ -59,7 +63,16 @@ class FWIDataset(Dataset):
         # Convert to torch.Tensor
         bscan = torch.from_numpy(bscan).unsqueeze(0)
         labels = torch.from_numpy(labels).unsqueeze(0)
-        return bscan, labels
+
+        if not self.use_tt:
+            return bscan, labels
+        else:
+            labels_np = labels.squeeze(0).numpy()
+            eps_map = (labels_np + 0.5) * 10.0
+            T_obs = calc_travel_time_2d(eps_map, dz=self.dz, c0=self.c0)
+
+            T_obs_ts = torch.from_numpy(T_obs)
+            return bscan, labels, T_obs_ts
 
 
 def dataloader(dataset, test_size, batch_size, shuffle):
@@ -84,4 +97,13 @@ def dataloader_missing(test_size=0.1, batch_size=8, shuffle=True):
 def dataloader_fwi(test_size=0.1, batch_size=8, shuffle=True):
     dataset = FWIDataset()
     return dataloader(dataset, test_size, batch_size, shuffle)
+
+
+def dataloader_fwi_tt(test_size=0.1, batch_size=8, shuffle=True, 
+                      bscan_dir='./data/Training_Bscan', 
+                      labels_dir='./data/Training_Labels'):
+    # 这里直接构建 FWIDataset with use_tt=True
+    dataset = FWIDataset(use_tt=True)
+    return dataloader(dataset, test_size, batch_size, shuffle)
+
 

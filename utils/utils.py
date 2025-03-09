@@ -36,3 +36,14 @@ def predict(model, data_loader):
 
     return all_inputs, all_outputs, all_targets
 
+
+def calc_travel_time_2d(eps_map, dz=0.1, c0=3e8):
+    H, W = eps_map.shape
+    T_out = np.zeros((W,), dtype=np.float32)
+    for x in range(W):
+        col_eps = eps_map[:, x]
+        col_sqrt = np.sqrt(np.clip(col_eps, 1e-6, None))
+        val = col_sqrt.sum() * (dz/c0)
+        T_out[x] = val
+    return T_out
+
