@@ -154,7 +154,7 @@ def calc_travel_time_tensor(eps_pred, dz=0.1, c0=3e8):
     return T_pred
 
 
-def train_unet_fwi(model, train_loader, test_loader, 
+def train_unet_fwi_tt(model, train_loader, test_loader, 
                    lr=5e-4, num_epochs=100, 
                    patience=30, tol=1e-4,
                    gamma=0.01,  # new param: weight for travel-time loss

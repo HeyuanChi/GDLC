@@ -64,49 +64,41 @@ class Up(nn.Module):
         return self.conv(x)
     
 
-class AttentionBlock(nn.Module):
-    def __init__(self, in_g, in_x, inter_channels):
-        super().__init__()
+class AttentionGate(nn.Module):
+    def __init__(self, F_l, F_g, F_int):
+        super(AttentionGate, self).__init__()
         self.W_g = nn.Sequential(
-            nn.Conv2d(in_g, inter_channels, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(inter_channels)
+            nn.Conv2d(F_g, F_int, kernel_size=1, stride=1, padding=0, bias=True),
+            nn.BatchNorm2d(F_int)
         )
         self.W_x = nn.Sequential(
-            nn.Conv2d(in_x, inter_channels, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(inter_channels)
+            nn.Conv2d(F_l, F_int, kernel_size=1, stride=1, padding=0, bias=True),
+            nn.BatchNorm2d(F_int)
         )
         self.psi = nn.Sequential(
-            nn.Conv2d(inter_channels, 1, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(F_int, 1, kernel_size=1, stride=1, padding=0, bias=True),
             nn.BatchNorm2d(1),
             nn.Sigmoid()
         )
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, g, x):
+    def forward(self, x, g):
         g1 = self.W_g(g)
         x1 = self.W_x(x)
-        
+
         psi = self.relu(g1 + x1)
         psi = self.psi(psi)
-        
-        return x * psi
+
+        out = x * psi
+        return out
 
 
 class UpAtt(nn.Module):
-    def __init__(self, in_channels, out_channels, 
-                 kernel_size=3, dropout=0.0, 
-                 resize='padding'):
+    def __init__(self, skip_channels, gating_channels, out_channels, kernel_size=3, dropout=0.0, resize='padding'):
         super().__init__()
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        
-        self.att = AttentionBlock(
-            in_g=out_channels, 
-            in_x=out_channels,
-            inter_channels=out_channels // 2
-        )
-        
-        self.conv = DoubleConv(in_channels, out_channels, kernel_size, dropout)
-        
+        self.att_gate = AttentionGate(F_l=skip_channels, F_g=gating_channels, F_int=out_channels // 2)
+        self.conv = DoubleConv(skip_channels + gating_channels, out_channels, kernel_size, dropout)
         self.resize = resize
 
     def forward(self, x1, x2):
@@ -116,23 +108,17 @@ class UpAtt(nn.Module):
             diffY = x2.size(2) - x1.size(2)
             diffX = x2.size(3) - x1.size(3)
             if diffY > 0 or diffX > 0:
-                x1 = F.pad(x1, [
-                    (diffX + 1) // 2, diffX // 2,
-                    (diffY + 1) // 2, diffY // 2
-                ])
-
+                x1 = F.pad(x1, [(diffX + 1) // 2, diffX // 2, (diffY + 1) // 2, diffY // 2])
+        
         elif self.resize == 'cropping':
             diffY = x2.size(2) - x1.size(2)
             diffX = x2.size(3) - x1.size(3)
             if diffY > 0 or diffX > 0:
-                x2 = x2[:, :, 
-                        (diffY + 1) // 2 : x2.size(2) - diffY // 2,
-                        (diffX + 1) // 2 : x2.size(3) - diffX // 2
-                ]
+                x2 = x2[:, :, (diffY + 1) // 2 : x2.size(2) - diffY // 2, (diffX + 1) // 2 : x2.size(3) - diffX // 2]
 
-        x2_att = self.att(x1, x2)
-
-        x = torch.cat([x2_att, x1], dim=1)
+        x2 = self.att_gate(x2, x1)
+        
+        x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
 
@@ -223,42 +209,12 @@ class FWIUNet(nn.Module):
         return logits
     
 
-class FWIUNetAtt(nn.Module):
+class FWIUNetAtt(FWIUNet):
     def __init__(self, in_channels=1, out_channels=1):
         super().__init__()
-
-        self.inc = DoubleConv(in_channels, 16, kernel_size=4)
-        self.down1 = Down(16,   32, kernel_size=4, dropout=0.1)
-        self.down2 = Down(32,   64, kernel_size=4, dropout=0.2)
-        self.down3 = Down(64,  128, kernel_size=4, dropout=0.2)
-        self.down4 = Down(128, 256, kernel_size=4, dropout=0.3)
-
-        self.up1 = UpAtt(256 + 128, 128, kernel_size=4, dropout=0.2, resize='cropping')
-        self.up2 = UpAtt(128 +  64,  64, kernel_size=4, dropout=0.2, resize='cropping')
-        self.up3 = UpAtt(64  +  32,  32, kernel_size=4, dropout=0.1, resize='cropping')
-        self.up4 = UpAtt(32  +  16,  16, kernel_size=4, dropout=0.1, resize='cropping')
-
-        self.outc = nn.Conv2d(16, out_channels, kernel_size=1)
-
-        self.apply(self._initialize_weights)
-
-    def _initialize_weights(self, m):
-        if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x1 = self.inc(x)       
-        x2 = self.down1(x1)    
-        x3 = self.down2(x2)    
-        x4 = self.down3(x3)    
-        x5 = self.down4(x4)    
-
-        x = self.up1(x5, x4)   
-        x = self.up2(x, x3)    
-        x = self.up3(x, x2)    
-        x = self.up4(x, x1)    
-
-        logits = self.outc(x)  
-        return logits
+        
+        # Decoder with Attention
+        self.up1 = UpAtt(128, 256, 128, kernel_size=4, dropout=0.0, resize='cropping')
+        self.up2 = UpAtt( 64, 128,  64, kernel_size=4, dropout=0.0, resize='cropping')
+        self.up3 = UpAtt( 32,  64,  32, kernel_size=4, dropout=0.0, resize='cropping')
+        self.up4 = UpAtt( 16,  32,  16, kernel_size=4, dropout=0.0, resize='cropping')
