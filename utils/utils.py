@@ -47,3 +47,10 @@ def calc_travel_time_2d(eps_map, dz=0.1, c0=3e8):
         T_out[x] = val
     return T_out
 
+
+def predict_bagging(models, data_loader):
+    all_outputs = []
+    for model in models:
+        inputs, outputs, targets = predict(model, data_loader)
+        all_outputs.append(outputs.cpu().numpy())
+    return inputs, all_outputs, targets
