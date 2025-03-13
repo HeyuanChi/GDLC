@@ -69,7 +69,7 @@ def make_ground_truth(file_path):
     return np.flipud(Id_resized.T)
 
 
-def FDTD(eps_array):
+def FDTD(eps_array, num_materials=20):
     script_dir = Path(__file__).resolve().parent
     tmp_dir = script_dir / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -79,8 +79,8 @@ def FDTD(eps_array):
     
     materials, data = np.unique(eps_array, return_inverse=True)
     
-    if len(materials) > 100:
-        indices = np.linspace(0, len(materials) - 1, 100, dtype=int)
+    if len(materials) > num_materials:
+        indices = np.linspace(0, len(materials) - 1, num_materials, dtype=int)
         rep = materials[indices]
         mapping = np.array([np.argmin(np.abs(val - rep)) for val in materials])
         data = mapping[data]
