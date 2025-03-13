@@ -75,6 +75,26 @@ class FWIDataset(Dataset):
             return bscan, labels, T_obs_ts
 
 
+class DDPMDataset(Dataset):
+    def __init__(self, labels_dir='./data/Training_Labels'):
+        super().__init__()
+        self.labels_dir = labels_dir
+        self.num_samples = 4400
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        # Labels data
+        file_path = os.path.join(self.labels_dir, f'Model_{idx}.npy')
+        labels = np.load(file_path).astype(np.float32)
+        labels = labels / 10 - 0.5 # Convert to [-0.5, 0.5]
+
+        # Convert to torch.Tensor
+        labels = torch.from_numpy(labels).unsqueeze(0)
+        return labels
+    
+
 def dataloader(dataset, test_size, batch_size, shuffle):
     # use GPU
     device, kwargs = get_device()
@@ -99,11 +119,15 @@ def dataloader_fwi(test_size=0.1, batch_size=8, shuffle=True):
     return dataloader(dataset, test_size, batch_size, shuffle)
 
 
-def dataloader_fwi_tt(test_size=0.1, batch_size=8, shuffle=True, 
-                      bscan_dir='./data/Training_Bscan', 
-                      labels_dir='./data/Training_Labels'):
-    # 这里直接构建 FWIDataset with use_tt=True
+def dataloader_fwi_tt(test_size=0.1, batch_size=8, shuffle=True):
     dataset = FWIDataset(use_tt=True)
     return dataloader(dataset, test_size, batch_size, shuffle)
+
+
+def dataloader_ddpm(batch_size=8, shuffle=True):
+    dataset = DDPMDataset()
+    device, kwargs = get_device()
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
+    return data_loader
 
 

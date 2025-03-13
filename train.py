@@ -249,3 +249,51 @@ def train_unet_fwi_tt(model, train_loader, test_loader,
             break
 
     loss_log.close()
+
+
+def train_diffusion(model, data_loader, num_epochs=50, lr=1e-4, patience=30, tol=1e-4):
+    model = model.to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    early_stopper = EarlyStopper(patience=patience, min_delta=tol)
+
+    if not os.path.exists('./results/ddpm'):
+        os.mkdir('./results/ddpm')
+    loss_log = open("./results/ddpm/loss.csv", "w")
+    loss_log.write("epoch,train_loss\n")
+    
+    epoch_bar = tqdm(range(1, num_epochs + 1), desc='Epochs', leave=True)
+    for i, epoch in enumerate(epoch_bar):
+        model.train()
+        train_loss = 0.0
+
+        for batch_data in data_loader:
+            x0 = batch_data.to(device)
+            t = torch.randint(0, model.num_timesteps, (x0.shape[0],), device=device).long()
+
+            loss = model.p_losses(x0, t)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item() * x0.size(0)
+        train_loss = train_loss / len(data_loader.dataset)
+
+        # Update tqdm bar with current losses
+        epoch_bar.set_postfix({'Train Loss': f'{train_loss:.8f}'})
+
+        # Log the losses
+        loss_log.write(f"{epoch},{train_loss:.8f}\n")
+        loss_log.flush()
+
+        # Check for early stopping.
+        stop = early_stopper.early_stop(train_loss, model)
+        # Save the best model parameters
+        torch.save(early_stopper.best_model_state, f"./results/ddpm/model.pt")
+        if stop:
+            print(f"Early stopping triggered at epoch {epoch+1}. Best Loss: {early_stopper.min_validation_loss:.8f}")
+            model.load_state_dict(early_stopper.best_model_state)
+            break
+
+    loss_log.close()
